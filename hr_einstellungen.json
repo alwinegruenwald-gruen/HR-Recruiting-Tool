@@ -1,0 +1,43 @@
+{
+  "firmen_name": "Alvin & die Chipmunks",
+  "anrede": "Du",
+  "gender_stil": "Doppelpunkt (z.B. Mitarbeiter:innen)",
+  "highlight": "Global Player",
+  "stufen_liste": [
+    {
+      "name": "Junior",
+      "erfahrung_min": 0,
+      "erfahrung_max": 1,
+      "gehalt_min": 55000,
+      "gehalt_max": 60000
+    },
+    {
+      "name": "Professional",
+      "erfahrung_min": 2,
+      "erfahrung_max": 5,
+      "gehalt_min": 60000,
+      "gehalt_max": 70000
+    },
+    {
+      "name": "Senior",
+      "erfahrung_min": 5,
+      "erfahrung_max": 10,
+      "gehalt_min": 70000,
+      "gehalt_max": 90000
+    },
+    {
+      "name": "Lead",
+      "erfahrung_min": 10,
+      "erfahrung_max": 99,
+      "gehalt_min": 90000,
+      "gehalt_max": 150000
+    },
+    {
+      "name": "Neue Stufe",
+      "erfahrung_min": 0,
+      "erfahrung_max": 5,
+      "gehalt_min": 40000,
+      "gehalt_max": 60000
+    }
+  ]
+}
