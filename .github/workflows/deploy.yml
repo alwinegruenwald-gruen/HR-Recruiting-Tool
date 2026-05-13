@@ -1,0 +1,29 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Code auschecken
+        uses: actions/checkout@v3
+
+      - name: Python installieren
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Libraries installieren
+        run: pip install -r requirements.txt
+
+      - name: Code prüfen
+        run: python -m py_compile app.py && echo "✅ Code ist fehlerfrei"
+
+      - name: Render deployment auslösen
+        run: |
+          curl -X POST ${{ secrets.RENDER_DEPLOY_HOOK }}

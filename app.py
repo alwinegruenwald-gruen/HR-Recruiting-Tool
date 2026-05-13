@@ -1,5 +1,4 @@
 import streamlit as st
-from groq import Groq
 from docx import Document
 from fpdf import FPDF
 from io import BytesIO
@@ -10,9 +9,18 @@ import json
 import fitz  # pymupdf
 from dotenv import load_dotenv
 import os
+from google import genai
 
 load_dotenv()
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+
+client_gemini = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+
+def gemini(prompt):
+    response = client_gemini.models.generate_content(
+        model="gemini-2.5-flash",
+        contents=prompt
+    )
+    return response.text
 
 # --- SESSION STATE INITIALISIEREN ---
 if "anzeige" not in st.session_state:
@@ -121,11 +129,7 @@ def fuehre_compliance_loop_durch(anzeige_text):
         - [Verbesserung 1]
         Falls keine Probleme: schreibe bei PROBLEME: "Keine gefunden ✅"
         """
-        check_response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[{"role": "user", "content": compliance_prompt}]
-        )
-        ergebnis = check_response.choices[0].message.content
+        ergebnis = gemini(compliance_prompt)
         if "BESTANDEN" in ergebnis:
             return aktuelle_anzeige
         if versuch < 3:
@@ -137,17 +141,10 @@ def fuehre_compliance_loop_durch(anzeige_text):
             Korrigiere NUR die problematischen Stellen.
             Schreibe die vollständige korrigierte Anzeige zurück.
             """
-            korrektur_response = client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
-                messages=[{"role": "user", "content": korrektur_prompt}]
-            )
-            aktuelle_anzeige = formatiere_ueberschriften(
-                korrektur_response.choices[0].message.content
-            )
+            aktuelle_anzeige = formatiere_ueberschriften(gemini(korrektur_prompt))
     return aktuelle_anzeige
 
 def generiere_anzeige(job_titel, level, erfahrung, ort, homeoffice, aufgaben):
-    """Zentrale Funktion zum Generieren einer Anzeige – kein Gehalt mehr nötig"""
     aktuelle_daten = {
         "titel": job_titel,
         "level": level,
@@ -192,11 +189,7 @@ def generiere_anzeige(job_titel, level, erfahrung, ort, homeoffice, aufgaben):
     Schreibe die Anzeige in schönem Markdown-Format.
     Alle Überschriften NUR in Großbuchstaben.
     """
-    response = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        messages=[{"role": "user", "content": system_prompt}]
-    )
-    anzeige = formatiere_ueberschriften(response.choices[0].message.content)
+    anzeige = formatiere_ueberschriften(gemini(system_prompt))
     return anzeige, []
 
 def erstelle_word_dokument(anzeige_text):
@@ -469,7 +462,6 @@ if st.session_state.aktueller_schritt == 1:
     with tab2:
         st.markdown("**Beschreibe einfach was du suchst – der Agent erstellt die Anzeige direkt für dich.**")
 
-        # Agent Schritt 1: Freitext eingeben
         if st.session_state.agent_rückfragen is None:
             freitext = st.text_area(
                 "Was suchst du?",
@@ -481,12 +473,10 @@ if st.session_state.aktueller_schritt == 1:
                 if freitext:
                     with st.spinner("🤖 Agent analysiert deine Beschreibung..."):
                         analyse_prompt = f"""
-                        Du bist ein HR-Experte. Ein Teamleiter hat folgende Stelle beschrieben:
+                        Du bist ein HR-Experte für das Unternehmen "{FIRMEN_NAME}".
+                        Ein Teamleiter von {FIRMEN_NAME} hat folgende Stelle beschrieben:
                         "{freitext}"
                         
-                        Analysiere den Text und extrahiere was du bereits weißt.
-                        Stelle dann ALLE fehlenden Informationen als Rückfragen auf einmal.
-
                         WICHTIG:
                         - Erfinde KEINE Branche oder Unternehmensinfos
                         - Nutze NUR was der Teamleiter explizit beschrieben hat
@@ -513,15 +503,9 @@ if st.session_state.aktueller_schritt == 1:
                                 "Frage 2?"
                             ]
                         }}
-                        
-                        Felder die du bereits weißt fülle aus. Felder die fehlen lasse leer und stelle eine Rückfrage dazu.
                         """
                         try:
-                            response = client.chat.completions.create(
-                                model="llama-3.3-70b-versatile",
-                                messages=[{"role": "user", "content": analyse_prompt}]
-                            )
-                            rohtext = response.choices[0].message.content.strip()
+                            rohtext = gemini(analyse_prompt).strip()
                             if rohtext.startswith("```"):
                                 rohtext = rohtext.split("```")[1]
                                 if rohtext.startswith("json"):
@@ -535,12 +519,10 @@ if st.session_state.aktueller_schritt == 1:
                 else:
                     st.info("Bitte beschreibe zuerst was du suchst.")
 
-        # Agent Schritt 2: Rückfragen anzeigen und direkt Anzeige generieren
         else:
             verstanden = st.session_state.agent_rückfragen.get("verstanden", {})
             rückfragen = st.session_state.agent_rückfragen.get("rückfragen", [])
 
-            # Was der Agent verstanden hat
             if any(v for v in verstanden.values() if v):
                 st.success("✅ Das habe ich aus deiner Beschreibung verstanden:")
                 labels = {
@@ -554,7 +536,6 @@ if st.session_state.aktueller_schritt == 1:
                     if value:
                         st.markdown(f"- **{labels.get(key, key)}:** {value}")
 
-            # Rückfragen
             if rückfragen:
                 st.divider()
                 st.markdown("**❓ Noch ein paar Fragen:**")
@@ -576,8 +557,8 @@ if st.session_state.aktueller_schritt == 1:
                 if st.button("▶️ Anzeige generieren →", type="primary", key="agent_generieren"):
                     with st.spinner("🤖 Agent erstellt die Anzeige..."):
                         try:
-                            # Agent erstellt finales Formular
                             formular_prompt = f"""
+                            Du bist ein HR-Experte für {FIRMEN_NAME}.
                             Ursprüngliche Beschreibung: "{st.session_state.agent_freitext}"
                             Was ich verstanden hatte: {json.dumps(verstanden, ensure_ascii=False)}
                             Antworten auf Rückfragen: "{antworten}"
@@ -596,18 +577,13 @@ if st.session_state.aktueller_schritt == 1:
                             Arbeitsmodell muss einer dieser Werte sein: On-site, Remote, Hybrid
                             Erfahrung ist eine Zahl (Jahre)
                             """
-                            response2 = client.chat.completions.create(
-                                model="llama-3.3-70b-versatile",
-                                messages=[{"role": "user", "content": formular_prompt}]
-                            )
-                            rohtext = response2.choices[0].message.content.strip()
+                            rohtext = gemini(formular_prompt).strip()
                             if rohtext.startswith("```"):
                                 rohtext = rohtext.split("```")[1]
                                 if rohtext.startswith("json"):
                                     rohtext = rohtext[4:]
                             formular = json.loads(rohtext)
 
-                            # Direkt Anzeige generieren – kein Formular mehr!
                             anzeige, fehler = generiere_anzeige(
                                 formular.get("jobtitel", ""),
                                 formular.get("level", ERFAHRUNGSSTUFEN[0]),
@@ -671,13 +647,7 @@ elif st.session_state.aktueller_schritt == 2:
                 """
                 with st.spinner("✍️ Anzeige wird angepasst..."):
                     try:
-                        new_response = client.chat.completions.create(
-                            model="llama-3.3-70b-versatile",
-                            messages=[{"role": "user", "content": refinement_prompt}]
-                        )
-                        st.session_state.anzeige = formatiere_ueberschriften(
-                            new_response.choices[0].message.content
-                        )
+                        st.session_state.anzeige = formatiere_ueberschriften(gemini(refinement_prompt))
                         st.session_state.historie.append({
                             "version": len(st.session_state.historie) + 1,
                             "inhalt": st.session_state.anzeige,
